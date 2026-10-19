@@ -25,7 +25,7 @@ Updated 2026-10-19.
 
 ## Blockers / unverified
 
-- The connected GitHub account is `NightFantomProjects`; the public repository is `NightFantomProjects/XTM-MINER`. It was empty when inspected, and the ready source/report set is being added to it. No GitHub Release or tag is being created.
+- The connected GitHub account is `NightFantomProjects`; the public repository is `NightFantomProjects/XTM-MINER`. The ready source/report set was pushed in initial commit `54591a31c604ddb142dec1d79553545b79b279cb`. No GitHub Release or tag was created.
 - No authorized physical Android device is available in this session. Sandbox has no Termux runtime, Android SDK/NDK, `adb`, or emulator. Therefore ARM64 Android compilation, install/launch, native hashing on phone, thermal/battery behavior, and Android lifecycle/Stop are unverified.
 - No test payout address has been provided and no pool session was made. Pool authentication, valid work, accepted shares, pool-side worker evidence, and payouts are unverified.
 - The direct pool's TLS endpoint is evidenced by its current public instructions, but the project patch has not yet been compiled or exercised on Termux/Android trust stores.
