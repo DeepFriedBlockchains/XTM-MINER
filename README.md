@@ -1,51 +1,36 @@
 # XTM-Miner
 
-Independent Android CPU miner for Tari (XTM). This repository is in active development. It is **not yet a validated miner or APK**: live accepted shares and physical-device behavior remain unverified.
+Independent Android CPU miner for Tari (XTM), in active development. This repository is **not yet a validated miner or APK**: physical-device behavior and live accepted shares remain unverified.
 
-## Verified first mining route
+## Selected mining route
 
-The first implementation targets Tari's **standalone Tari RandomX (RxT / XTM-RX)** route through a pool that explicitly accepts XMRig Stratum submissions. This is distinct from Monero RandomX merge mining (RxM). The current Kryptex XTM-RX configuration documents algorithm `rx/0`, the pool `xtm-rx.kryptex.network:7038` as TCP SSL, login `TARI_WALLET/WORKER`, and vardiff. The pool page currently displays a 1% pool fee and a 200 XTM minimum payout; confirm these terms on the pool page before use because they can change. There is no Monero wallet or local Tari merge-mining proxy in this direct route.
+The first implementation targets Tari's **standalone Tari RandomX (RxT / XTM-RX)** route through a pool that explicitly accepts XMRig Stratum submissions. This is distinct from Monero RandomX merge mining (RxM). The selected Kryptex XTM-RX setup documents algorithm `rx/0`, endpoint `xtm-rx.kryptex.network:7038` over TCP SSL, and login `TARI_WALLET/WORKER`. Pool fees, payout thresholds and endpoints may change; confirm current terms on the operator's pages before use. The route does not use a Monero wallet or local Tari merge-mining proxy. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
-Tari's own protocol source identifies RxT as a separate proof-of-work record (`pow_algo = 2`) and separately describes RxM. Tari's current miner README says its standalone miner currently supports SHA3; that is not this direct RxT pool route. Tari's RFC explains consensus, while the selected pool's instructions establish the practical Stratum endpoint and login details. See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+## ARM64 Termux source milestone
 
-## Termux ARM64 milestone
+The current deliverable builds upstream XMRig v6.26.0 (`b2ca72480c58d197e18c885d9fc1a0c8d517e60a`) from the checksum-pinned source archive in `vendor/`. The project applies a narrow patch to require Stratum TLS certificate-chain and hostname verification. The native Termux build requires an ARM64 Android device with Termux; it does not download executable source during the build.
 
-The first deliverable is an ARM64 Termux build of upstream XMRig with unnecessary GPU backends disabled. The source is pinned to XMRig tag `v6.26.0`, commit `b2ca72480c58d197e18c885d9fc1a0c8d517e60a`. A small patch enforces CA-chain and hostname verification for Stratum TLS; see [DEPENDENCIES.md](DEPENDENCIES.md) and `patches/`.
-
-The exact upstream source snapshot is bundled at `vendor/xmrig-v6.26.0.tar.gz` and verified by SHA-256 before extraction. The build script compiles that snapshot plus the project TLS patch, without cloning or downloading executable code.
-
-On an ARM64 Android device with Termux installed from a trusted source:
+After Gate 1 in [PHONE-TESTING.md](PHONE-TESTING.md) is reviewed, install Termux packages and build from the project directory:
 
 ```sh
 pkg update
-pkg install cmake ninja clang make openssl libuv ca-certificates python patch coreutils tar
-# Obtain this source tree, then:
+pkg install cmake ninja clang make openssl libuv ca-certificates python patch coreutils tar unzip
 ./scripts/build-termux.sh
-./scripts/xtm-miner.sh --help
+./scripts/test-termux.sh
 ```
 
-Set credentials only in your local shell or private configuration. Do not commit wallet addresses, passwords, or logs containing them. Example invocation (replace placeholders):
+The build defaults to one compile job to reduce memory pressure. Set `BUILD_JOBS=2` only if the phone has adequate available memory. The test script checks the source checksum, dependencies, engine version/help, and launcher behavior with a mock. `./scripts/test-termux.sh --tls-local` additionally runs local synthetic-certificate checks; neither test connects to the production pool or proves hashing. Follow the phone guide gate by gate. Do not skip ahead to pool testing.
 
-```sh
-./scripts/xtm-miner.sh \
-  --wallet 'YOUR_PUBLIC_TARI_ADDRESS' \
-  --worker 'phone01' \
-  --threads 2 \
-  --pool 'xtm-rx.kryptex.network:7038' \
-  --tls \
-  --start
-```
+The launcher requires both a public Tari receiving address and an explicit `--start`. It defaults to one mining thread, RandomX light mode, verified TLS, no huge pages, and XMRig's upstream 1% developer donation. An atomic lock at `$PREFIX/var/lib/xtm-miner/miner.lock` refuses simultaneous XTM-Miner sessions across separate project copies in the same Termux installation. The launcher uses a private temporary config and forwards stop signals to the child miner. Light mode requires at least 512 MiB of system-reported `MemAvailable`; opt-in fast mode requires 3 GiB. These are conservative preflight heuristics, not Android per-process memory limits or device-safety guarantees. The wrapper adds no project fee and makes no profitability claim.
 
-The wrapper requires an explicit wallet and `--start` before launching the miner. It defaults to one thread and RandomX light mode, which reduces RandomX memory use to roughly 256 MiB but is substantially slower than fast mode. Fast mode is refused below 2.5 GiB of available memory; light mode is refused below 384 MiB. These are conservative allocation checks, not guarantees that a device will remain cool or responsive. The wrapper preserves XMRig's upstream 1% developer donation and adds no project fee. It makes no claim about profitability or device suitability.
+## Validation status
 
-## Current validation status
+- Tari RxT/XTM-RX route, pool instructions, XMRig revision, and TLS patch rationale are documented in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+- The pinned patched engine previously built on x86_64 Linux; local synthetic TLS tests accepted a trusted matching hostname and rejected an untrusted CA and a hostname mismatch. This is host testing only.
+- The updated launcher mock test passed in the Sandbox for explicit-start gating, config contents and permissions, fail-closed CA handling, cleanup, duplicate-session refusal, SIGINT/TERM forwarding, and no orphan mock process.
+- The ARM64 Termux build and `test-termux.sh` have not yet run on a phone.
+- No production pool connection, authenticated worker, actual RandomX pool job, or accepted share has been tested.
+- No Android cross-build or emulator test was available in the Sandbox. There is no attached Android phone, SDK/NDK, `adb`, or emulator; details are in [docs/ANDROID-TERMUX-TOOLCHAIN.md](docs/ANDROID-TERMUX-TOOLCHAIN.md).
+- No standalone APK/JNI integration, thermal/battery behavior, Android lifecycle handling, or physical Stop test exists yet.
 
-- Tari route, pool algorithm/login/endpoint, and XMRig upstream revision: checked against primary project/pool sources; documented.
-- Patched XMRig source: compiled successfully for x86_64 Linux with OpenSSL 3.0.13 and libuv 1.48.0; local TLS checks passed for trusted/valid host, untrusted CA, and hostname mismatch.
-- Launcher static/mock checks: passed; these are not actual mining or pool tests.
-- Native compilation on ARM64 Android/Termux: not yet run.
-- Pool authentication and accepted XTM share: not yet tested; requires an ARM64 device, a user-supplied public Tari receive address, and pool access.
-- APK/JNI integration: not implemented.
-- Physical thermal, battery, lifecycle, and Stop checks: not run.
-
-See [DECISIONS.md](DECISIONS.md) for work state and blockers. Do not treat a successful build or pool login as accepted-share evidence.
+A build or pool login alone is not accepted-share evidence. See [docs/TEST-REPORT.md](docs/TEST-REPORT.md) and [DECISIONS.md](DECISIONS.md) for exact evidence and next steps.

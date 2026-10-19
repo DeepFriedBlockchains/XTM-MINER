@@ -1,6 +1,7 @@
 # Generated build products and local installation
 /build/
 /bin/
+/run/
 
 # Local Android/Gradle configuration (future APK work)
 /.gradle/

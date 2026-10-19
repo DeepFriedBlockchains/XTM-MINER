@@ -14,6 +14,8 @@ The selected engine is XMRig v6.26.0 at commit `b2ca72480c58d197e18c885d9fc1a0c8
 
 The payout login uses the pool's supported Tari public receiving address and a worker suffix, not a Monero address [3] [4]. The pool guide's worker-name rule is Latin letters or digits without spaces [4]. XTM-Miner does not copy the example address in the guide into defaults and never requests a seed phrase or private key.
 
+The current Tari Wallet libraries document single and dual public address types and Emoji, Base58, and Hex serializations; their examples expose `to_base58()` for both forms [9]. The selected pool's instructions require `WALLET_ADDRESS/WORKER_NAME` but do not specify accepted alternate encodings [3] [4]. For the first integration, use a public mainnet receiving address copied as plain-text/Base58 from a Tari wallet; do not transform the string or use an emoji/hex form unless the pool confirms it accepts that representation. The launcher rejects whitespace and `/` in the address but deliberately does not impose a guessed length or character-class regex. Pool acceptance of the selected wallet's exact serialization remains pending the live test.
+
 Tari's current standalone `minotari_miner` README says it currently supports SHA3 when connected to a Tari base node and wallet [6]. Tari Universe documents different current RandomX and pool mining configurations [7]. These modes must not be confused with the selected direct RxT/XTM-RX pool route.
 
 ## TLS requirement
@@ -30,3 +32,4 @@ The pool documents its selected endpoint as SSL/TCP [3]. Inspection of pinned XM
 [6]: https://github.com/tari-project/tari/blob/development/applications/minotari_miner/README.md "Tari standalone miner README"
 [7]: https://github.com/tari-project/universe/blob/main/CHANGELOG.md "Tari Universe changelog"
 [8]: https://github.com/xmrig/xmrig/blob/v6.26.0/src/base/net/stratum/Tls.cpp "XMRig v6.26.0 Stratum TLS implementation"
+[9]: https://github.com/tari-project/tari-wallet "Tari Wallet public address types and encodings"

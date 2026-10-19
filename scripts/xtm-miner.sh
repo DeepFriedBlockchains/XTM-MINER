@@ -25,16 +25,16 @@ Options:
   --pool HOST:PORT         Pool endpoint (default: XTM-RX Kryptex global)
   --worker NAME            Worker name; letters and digits only (default: android01)
   --threads N              Mining threads, 1..available CPUs (default: 1)
-  --password VALUE         Pool password/options (default: x); avoid shell history
+  --password VALUE         Pool password/options (default: x; avoid shell history)
   --randomx-mode MODE      light or fast (default: light, lower memory/slower)
   --tls                    Use TLS with CA-chain and hostname verification (default)
   --no-tls                 Explicit plaintext opt-out for a pool you trust
   --help                   Show this help
 
 Credentials can alternatively be supplied through XTM_WALLET, XTM_WORKER,
-XTM_THREADS, and XTM_PASSWORD. Wallet and password values are not written to
-project files by this script. Start mining only if you understand the heat,
-power, and pool risks. XMRig's upstream 1% developer donation remains enabled.
+XTM_THREADS, and XTM_PASSWORD. Wallet/password values are not written to project
+files or passed as Python command-line arguments. Start only if you understand
+the heat, power, and pool risks. XMRig's upstream 1% developer donation remains.
 USAGE
 }
 fail() { echo "Error: $*" >&2; exit 2; }
@@ -56,48 +56,117 @@ while (($#)); do
 done
 
 [[ "$START" == 1 ]] || fail "mining does not start automatically; pass --start after reviewing the settings"
+[[ -n "${PREFIX:-}" ]] || fail "run this launcher inside Termux so its temporary configuration stays in the private app directory"
 [[ -x "$BIN" ]] || fail "binary missing; first run scripts/build-termux.sh"
+command -v python3 >/dev/null 2>&1 || fail "Python 3 missing; run pkg install python before starting the miner"
 [[ -n "$WALLET" ]] || fail "provide a public Tari payout address with --wallet or XTM_WALLET"
 [[ "$WALLET" != *[[:space:]/]* ]] || fail "wallet address must not contain whitespace or '/'"
 [[ "$WORKER" =~ ^[A-Za-z0-9]{1,24}$ ]] || fail "worker must be 1-24 ASCII letters/digits"
 [[ "$THREADS" =~ ^[1-9][0-9]*$ ]] || fail "threads must be a positive integer"
 CPUS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+[[ "$CPUS" =~ ^[1-9][0-9]*$ ]] || CPUS=1
 (( THREADS <= CPUS )) || fail "threads ($THREADS) exceeds available CPUs ($CPUS)"
 [[ "$POOL" =~ ^[A-Za-z0-9.-]+:[0-9]{1,5}$ ]] || fail "pool must be hostname:port"
 PORT="${POOL##*:}"
 (( PORT >= 1 && PORT <= 65535 )) || fail "invalid pool port"
 [[ "$RANDOMX_MODE" == light || "$RANDOMX_MODE" == fast ]] || fail "RandomX mode must be light or fast"
-[[ -n "$PASSWORD" && "$PASSWORD" != *$'\n'* ]] || fail "invalid pool password"
+[[ -n "$PASSWORD" && "$PASSWORD" != *$'\n'* && "$PASSWORD" != *$'\r'* ]] || fail "invalid pool password"
 
-# Refuse to initialize RandomX below conservative free-memory thresholds.
-# The fast dataset requires about 2.3 GiB plus operating headroom; light mode
-# still needs a 256 MiB cache, so reserve at least 384 MiB for it.
-MEM_AVAILABLE_KB=""
+# MemAvailable is a system-wide estimate, not an Android per-process guarantee.
+# Light mode uses a 256 MiB cache; require 512 MiB available for additional runtime headroom.
+# Fast mode also allocates a multi-GiB dataset; keep it opt-in and require 3 GiB available.
+MEM_AVAILABLE_KIB=""
 while read -r mem_key mem_value _; do
-  if [[ "$mem_key" == MemAvailable: ]]; then MEM_AVAILABLE_KB="$mem_value"; break; fi
+  if [[ "$mem_key" == MemAvailable: ]]; then MEM_AVAILABLE_KIB="$mem_value"; break; fi
 done < /proc/meminfo
-[[ "$MEM_AVAILABLE_KB" =~ ^[0-9]+$ ]] || fail "cannot read available memory from /proc/meminfo"
+[[ "$MEM_AVAILABLE_KIB" =~ ^[0-9]+$ ]] || fail "cannot read available memory from /proc/meminfo"
 if [[ "$RANDOMX_MODE" == light ]]; then
-  (( MEM_AVAILABLE_KB >= 393216 )) || fail "less than 384 MiB available; refusing RandomX light-mode allocation"
+  (( MEM_AVAILABLE_KIB >= 524288 )) || fail "less than 512 MiB available; refusing RandomX light-mode allocation"
 else
-  (( MEM_AVAILABLE_KB >= 2560000 )) || fail "less than 2.5 GiB available; refusing RandomX fast-mode allocation"
+  (( MEM_AVAILABLE_KIB >= 3145728 )) || fail "less than 3 GiB available; refusing RandomX fast-mode allocation"
 fi
 
 if [[ "$TLS" == 1 ]]; then
-  [[ -r "${SSL_CERT_FILE:-${PREFIX:-/nonexistent}/etc/tls/cert.pem}" ]] || fail "TLS CA bundle unavailable; install ca-certificates or set SSL_CERT_FILE"
-  [[ -n "${PREFIX:-}" ]] || fail "TLS mining is currently supported only when launched from Termux"
+  [[ -n "${PREFIX:-}" ]] || fail "TLS mining is supported only when launched from Termux"
+  [[ -r "${SSL_CERT_FILE:-$PREFIX/etc/tls/cert.pem}" ]] || fail "TLS CA bundle unavailable; install ca-certificates or set SSL_CERT_FILE"
 fi
 
-# The process inherits no secrets in command arguments. File is private and removed on exit.
-CONFIG="$(mktemp "${TMPDIR:-$PREFIX/tmp}/xtm-miner.XXXXXX.json")"
-chmod 600 "$CONFIG"
-cleanup() { rm -f "$CONFIG"; }
+# An atomic persistent, app-private lock prevents duplicate sessions across
+# separate project copies in this Termux installation. Stale locks fail closed.
+LOCK_PARENT="$PREFIX/var/lib/xtm-miner"
+LOCK_DIR="$LOCK_PARENT/miner.lock"
+mkdir -p "$LOCK_PARENT"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  OLD_PID="$(cat "$LOCK_DIR/pid" 2>/dev/null || true)"
+  if [[ "$OLD_PID" =~ ^[1-9][0-9]*$ ]] && kill -0 "$OLD_PID" 2>/dev/null; then
+    fail "another XTM-Miner instance is active (PID $OLD_PID)"
+  fi
+  fail "a stale or incomplete miner lock exists at $LOCK_DIR; verify no miner process is running before removing it"
+fi
+LOCK_HELD=1
+printf '%s\n' "$$" > "$LOCK_DIR/pid"
+CONFIG=""
+MINER_PID=""
+cleanup() {
+  [[ -z "${CONFIG:-}" ]] || rm -f "$CONFIG"
+  if [[ "${LOCK_HELD:-0}" == 1 ]]; then
+    rm -f "$LOCK_DIR/pid"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  fi
+}
+miner_is_running() {
+  [[ -n "${MINER_PID:-}" && -r "/proc/$MINER_PID/stat" ]] || return 1
+  local line rest state
+  IFS= read -r line < "/proc/$MINER_PID/stat" || return 1
+  rest="${line##*) }"
+  state="${rest%% *}"
+  [[ "$state" != Z && "$state" != X ]]
+}
+stop_miner() {
+  local signal="$1" exit_code="$2" attempt
+  trap '' INT TERM HUP
+  if miner_is_running; then
+    kill -s "$signal" "$MINER_PID" 2>/dev/null || true
+    for ((attempt=0; attempt<10; attempt++)); do
+      miner_is_running || break
+      sleep 1
+    done
+    if miner_is_running; then
+      echo "Miner did not stop after $signal; sending TERM." >&2
+      kill -TERM "$MINER_PID" 2>/dev/null || true
+      for ((attempt=0; attempt<3; attempt++)); do
+        miner_is_running || break
+        sleep 1
+      done
+    fi
+    if miner_is_running; then
+      echo "Miner ignored graceful signals; sending KILL as a last resort." >&2
+      kill -KILL "$MINER_PID" 2>/dev/null || true
+    fi
+  fi
+  if [[ -n "$MINER_PID" ]]; then wait "$MINER_PID" 2>/dev/null || true; fi
+  MINER_PID=""
+  exit "$exit_code"
+}
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM HUP
-python3 - "$CONFIG" "$POOL" "$WALLET/$WORKER" "$PASSWORD" "$THREADS" "$RANDOMX_MODE" "$TLS" <<'PY'
+trap 'stop_miner INT 130' INT
+trap 'stop_miner TERM 143' TERM
+trap 'stop_miner HUP 129' HUP
+
+CONFIG="$(mktemp "$PREFIX/tmp/xtm-miner.XXXXXX.json")"
+chmod 600 "$CONFIG"
+
+# Send credentials over stdin, not in the temporary Python process argument list.
+printf '%s\0' "$POOL" "$WALLET/$WORKER" "$PASSWORD" "$THREADS" "$RANDOMX_MODE" "$TLS" |
+python3 -c '
 import json, sys
-path, pool, user, password, threads, mode, tls = sys.argv[1:]
+path = sys.argv[1]
+fields = sys.stdin.buffer.read().split(b"\0")
+if fields and fields[-1] == b"":
+    fields.pop()
+if len(fields) != 6:
+    raise SystemExit("invalid private configuration input")
+pool, user, password, threads, mode, tls = (field.decode("utf-8") for field in fields)
 config = {
     "autosave": False,
     "background": False,
@@ -107,20 +176,28 @@ config = {
     "opencl": False,
     "cuda": False,
     "randomx": {"mode": mode, "1gb-pages": False, "rdmsr": False, "wrmsr": False},
-    "pools": [{
-        "algo": "rx/0", "url": pool, "user": user, "pass": password,
-        "keepalive": True, "tls": tls == "1", "sni": tls == "1", "enabled": True
-    }],
+    "pools": [{"algo": "rx/0", "url": pool, "user": user, "pass": password,
+               "keepalive": True, "tls": tls == "1", "sni": tls == "1", "enabled": True}],
     "print-time": 30,
     "syslog": False
 }
 with open(path, "w", encoding="utf-8") as f:
     json.dump(config, f)
     f.write("\n")
-PY
-unset XTM_PASSWORD
+' "$CONFIG"
+unset XTM_WALLET XTM_PASSWORD
 export SSL_CERT_FILE="${SSL_CERT_FILE:-$PREFIX/etc/tls/cert.pem}"
 echo "Starting XTM-Miner: Tari RandomX rx/0, pool=$POOL, worker=$WORKER, threads=$THREADS, mode=$RANDOMX_MODE, TLS=$TLS"
 [[ "$TLS" == 1 ]] || echo "WARNING: this pool connection is unencrypted."
-echo "Press Ctrl-C to stop. Do not infer accepted shares from connection/authentication alone."
-"$BIN" --config="$CONFIG" --threads="$THREADS"
+echo "Press Ctrl-C to stop. Authentication is not evidence of an accepted share."
+"$BIN" --config="$CONFIG" --threads="$THREADS" &
+MINER_PID=$!
+printf '%s\n' "$MINER_PID" > "$LOCK_DIR/pid"
+echo "Miner process started (PID $MINER_PID)."
+if wait "$MINER_PID"; then
+  miner_status=0
+else
+  miner_status=$?
+fi
+MINER_PID=""
+exit "$miner_status"
