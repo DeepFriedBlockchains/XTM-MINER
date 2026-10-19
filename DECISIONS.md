@@ -27,7 +27,7 @@ Updated 2026-10-19.
 
 ## Current blockers and unverified criteria
 
-- The connected GitHub account is `NightFantomProjects`; repository is `NightFantomProjects/XTM-MINER`. The initial development source was pushed; no GitHub Release or tag was created. This current change set is being prepared for review and push.
+- The connected GitHub account is `NightFantomProjects`; repository is `NightFantomProjects/XTM-MINER`. The ARM64 Termux test milestone was pushed to `main` at `def0588497b831e99b6196f15ede212389b2380e`. The working tree was clean after that push; no GitHub Release or tag was created.
 - Device enumeration in this session shows only the Sandbox. No authorized physical Android phone, Termux runtime, Android SDK/NDK, `adb`, `sdkmanager`, or emulator is available here. No ARM64 Android cross-build, emulator test, Termux build, installation, or APK test was performed. The official NDK toolchain is documented but no NDK was downloaded and no license terms were accepted on the user's behalf.
 - No public test payout address has been provided and no production pool session was made. Pool authentication, Tari work hashing, accepted shares, pool-side worker evidence, payouts, and live pool TLS are unverified.
 - Physical memory use, temperature, battery, lifecycle, screen-off, stop, and orphan-process behavior remain unverified. The launcher mock is not physical mining evidence.
