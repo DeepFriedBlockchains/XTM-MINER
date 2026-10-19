@@ -1,0 +1,22 @@
+# Generated build products and local installation
+/build/
+/bin/
+
+# Local Android/Gradle configuration (future APK work)
+/.gradle/
+/local.properties
+/.idea/
+
+# Private signing material and credentials
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.key
+/user-config.json
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.swp
+.DS_Store

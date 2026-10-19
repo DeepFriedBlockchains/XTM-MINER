@@ -1,0 +1,72 @@
+diff --git a/src/base/net/stratum/Client.cpp b/src/base/net/stratum/Client.cpp
+index 2f5865b..9ac7b73 100644
+--- a/src/base/net/stratum/Client.cpp
++++ b/src/base/net/stratum/Client.cpp
+@@ -608 +608,3 @@ void xmrig::Client::handshake()
+-        m_tls->handshake(m_pool.isSNI() ? m_pool.host().data() : nullptr);
++        if (!m_tls->handshake(m_pool.isSNI() ? m_pool.host().data() : nullptr)) {
++            close();
++        }
+diff --git a/src/base/net/stratum/Tls.cpp b/src/base/net/stratum/Tls.cpp
+index 2a1ad1e..5513fb9 100644
+--- a/src/base/net/stratum/Tls.cpp
++++ b/src/base/net/stratum/Tls.cpp
+@@ -32,0 +33,4 @@
++#include <openssl/err.h>
++#include <openssl/x509v3.h>
++
++#define XTM_MINER_TLS_CA_HOST_VERIFY 1
+@@ -44,0 +49,10 @@ xmrig::Client::Tls::Tls(Client *client) :
++    // XMRig upstream only checks an optional certificate fingerprint. Require
++    // normal CA-chain validation; trust roots come from the OS/OpenSSL store.
++    SSL_CTX_set_verify(m_ctx, SSL_VERIFY_PEER, nullptr);
++    if (SSL_CTX_set_default_verify_paths(m_ctx) != 1) {
++        LOG_ERR("Unable to load trusted CA certificates for Stratum TLS");
++        SSL_CTX_free(m_ctx);
++        m_ctx = nullptr;
++        return;
++    }
++
+@@ -64,0 +79,4 @@ bool xmrig::Client::Tls::handshake(const char* servername)
++    if (!m_ctx) {
++        return false;
++    }
++
+@@ -71,0 +90,7 @@ bool xmrig::Client::Tls::handshake(const char* servername)
++    const auto &host = m_client->m_pool.host();
++    if (host.isNull() || X509_VERIFY_PARAM_set1_host(SSL_get0_param(m_ssl), host.data(), 0) != 1) {
++        LOG_ERR("[%s] Failed to configure TLS hostname verification", m_client->url());
++        SSL_free(m_ssl);
++        m_ssl = nullptr;
++        return false;
++    }
+@@ -111,2 +136,9 @@ void xmrig::Client::Tls::read(const char *data, size_t size)
+-        if (rc < 0 && SSL_get_error(m_ssl, rc) == SSL_ERROR_WANT_READ) {
+-            send();
++        if (rc < 0) {
++            const int error = SSL_get_error(m_ssl, rc);
++            if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
++                send();
++            } else {
++                LOG_ERR("[%s] Stratum TLS handshake failed; rejecting connection", m_client->url());
++                ERR_print_errors_fp(stderr);
++                m_client->close();
++            }
+@@ -118 +149,0 @@ void xmrig::Client::Tls::read(const char *data, size_t size)
+-
+@@ -125 +156 @@ void xmrig::Client::Tls::read(const char *data, size_t size)
+-      }
++        }
+@@ -127 +158 @@ void xmrig::Client::Tls::read(const char *data, size_t size)
+-      return;
++        return;
+@@ -148,0 +180,2 @@ bool xmrig::Client::Tls::verify(X509 *cert)
++        return false;
++    }
+@@ -149,0 +183,6 @@ bool xmrig::Client::Tls::verify(X509 *cert)
++    if (SSL_get_verify_result(m_ssl) != X509_V_OK) {
++        LOG_ERR("[%s] Failed to verify server certificate against trusted CA roots", m_client->url());
++        return false;
++    }
++    if (X509_check_host(cert, m_client->m_pool.host().data(), 0, 0, nullptr) != 1) {
++        LOG_ERR("[%s] Server certificate does not match the pool hostname", m_client->url());
