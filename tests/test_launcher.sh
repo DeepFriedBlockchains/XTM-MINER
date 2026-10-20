@@ -16,7 +16,7 @@ import json,os,sys
 config=json.load(open(sys.argv[1]))
 pool=config['pools'][0]
 assert pool['algo']=='rx/0'
-assert pool['url']=='127.0.0.1:5555'
+assert pool['url']==os.environ.get('MOCK_EXPECT_POOL', '127.0.0.1:5555')
 assert pool['user']=='TARI_TEST_ADDRESS/phone01'
 assert pool['pass']=='x'
 expected_tls = os.environ.get('MOCK_EXPECT_TLS', '0') == '1'
@@ -38,6 +38,13 @@ fi
 if PREFIX="$TMP/prefix" TMPDIR="$TMP/tmp" bash "$TMP/scripts/xtm-miner.sh" --start --wallet TARI_TEST_ADDRESS --worker 'bad worker' --no-tls >/dev/null 2>&1; then
   echo 'FAIL: invalid worker accepted' >&2; exit 1
 fi
+if PREFIX="$TMP/prefix" TMPDIR="$TMP/tmp" XTM_WALLET=TARI_TEST_ADDRESS XTM_THREADS=9999999 \
+  bash "$TMP/scripts/xtm-miner.sh" --start --pool 127.0.0.1:5555 --no-tls >"$TMP/threads-error.log" 2>&1; then
+  echo 'FAIL: impractically large thread count accepted' >&2; exit 1
+fi
+grep -q 'threads value is unreasonably large' "$TMP/threads-error.log" || {
+  echo 'FAIL: oversized thread count did not give the expected validation error' >&2; cat "$TMP/threads-error.log" >&2; exit 1;
+}
 if PREFIX="$TMP/prefix" TMPDIR="$TMP/tmp" SSL_CERT_FILE="$TMP/missing-cert.pem" \
   XTM_WALLET=TARI_TEST_ADDRESS bash "$TMP/scripts/xtm-miner.sh" --start --pool 127.0.0.1:5555 >"$TMP/ca-error.log" 2>&1; then
   echo 'FAIL: TLS launched without a readable CA bundle' >&2; exit 1
@@ -51,6 +58,8 @@ PREFIX="$TMP/prefix" TMPDIR="$TMP/tmp" MOCK_EXPECT_TLS=1 XTM_WALLET=TARI_TEST_AD
   bash "$TMP/scripts/xtm-miner.sh" --start --pool 127.0.0.1:5555 --tls >/dev/null
 PREFIX="$TMP/prefix" TMPDIR="$TMP/tmp" XTM_WALLET=TARI_TEST_ADDRESS XTM_WORKER=phone01 \
   bash "$TMP/scripts/xtm-miner.sh" --start --no-tls --pool 127.0.0.1:5555 >/dev/null
+PREFIX="$TMP/prefix" TMPDIR="$TMP/tmp" MOCK_EXPECT_POOL=127.0.0.1:00080 XTM_WALLET=TARI_TEST_ADDRESS XTM_WORKER=phone01 \
+  bash "$TMP/scripts/xtm-miner.sh" --start --no-tls --pool 127.0.0.1:00080 >/dev/null
 if compgen -G "$TMP/prefix/tmp/xtm-miner.*.json" >/dev/null; then
   echo 'FAIL: private runtime config was not removed' >&2; exit 1
 fi

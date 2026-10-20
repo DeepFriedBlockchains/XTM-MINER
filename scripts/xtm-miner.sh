@@ -63,12 +63,16 @@ command -v python3 >/dev/null 2>&1 || fail "Python 3 missing; run pkg install py
 [[ "$WALLET" != *[[:space:]/]* ]] || fail "wallet address must not contain whitespace or '/'"
 [[ "$WORKER" =~ ^[A-Za-z0-9]{1,24}$ ]] || fail "worker must be 1-24 ASCII letters/digits"
 [[ "$THREADS" =~ ^[1-9][0-9]*$ ]] || fail "threads must be a positive integer"
+[[ "${#THREADS}" -le 6 ]] || fail "threads value is unreasonably large"
+THREADS_NUM=$((10#$THREADS))
 CPUS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
-[[ "$CPUS" =~ ^[1-9][0-9]*$ ]] || CPUS=1
-(( THREADS <= CPUS )) || fail "threads ($THREADS) exceeds available CPUs ($CPUS)"
+[[ "$CPUS" =~ ^[1-9][0-9]*$ && "${#CPUS}" -le 6 ]] || CPUS=1
+CPUS_NUM=$((10#$CPUS))
+(( THREADS_NUM <= CPUS_NUM )) || fail "threads ($THREADS) exceeds available CPUs ($CPUS)"
 [[ "$POOL" =~ ^[A-Za-z0-9.-]+:[0-9]{1,5}$ ]] || fail "pool must be hostname:port"
 PORT="${POOL##*:}"
-(( PORT >= 1 && PORT <= 65535 )) || fail "invalid pool port"
+PORT_NUM=$((10#$PORT))
+(( PORT_NUM >= 1 && PORT_NUM <= 65535 )) || fail "invalid pool port"
 [[ "$RANDOMX_MODE" == light || "$RANDOMX_MODE" == fast ]] || fail "RandomX mode must be light or fast"
 [[ -n "$PASSWORD" && "$PASSWORD" != *$'\n'* && "$PASSWORD" != *$'\r'* ]] || fail "invalid pool password"
 
