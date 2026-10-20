@@ -20,9 +20,15 @@ fi
   echo "This test package targets ARM64 only; detected $(uname -m)" >&2
   exit 2
 }
-for cmd in bash cmake ninja clang clang++ tar sha256sum patch python3 openssl; do
+for cmd in bash cmake ninja clang clang++ tar sha256sum patch python3; do
   command -v "$cmd" >/dev/null || { echo "Missing $cmd; install the project Termux prerequisites first." >&2; exit 2; }
 done
+if [[ "$TLS_LOCAL" == 1 ]]; then
+  command -v openssl >/dev/null || {
+    echo "Missing the OpenSSL command-line tool; install openssl-tool to run --tls-local." >&2
+    exit 2
+  }
+fi
 for header in "$PREFIX/include/uv.h" "$PREFIX/include/openssl/ssl.h"; do
   [[ -r "$header" ]] || { echo "Missing dependency header: $header" >&2; exit 3; }
 done

@@ -37,6 +37,8 @@ pkg update
 pkg install cmake ninja clang make openssl libuv ca-certificates python patch coreutils tar unzip
 ```
 
+The `openssl` package supplies the libraries used by the miner. Termux packages the `openssl` command-line utility separately as `openssl-tool` [1]. The ordinary smoke test does not need that command; install `openssl-tool` only if you choose to run the optional local TLS certificate test.
+
 Download the supplied `xtm-miner-termux-arm64-test.zip` file to the phone's Downloads folder. Then run:
 
 ```sh
@@ -73,7 +75,7 @@ This checks the pinned archive, Termux dependencies, the engine version/help, an
 ./scripts/test-termux.sh --tls-local
 ```
 
-That test uses local test certificates and no pool credentials. Stop and report the output before any production-pool test.
+That test uses local test certificates and no pool credentials. It requires the optional `openssl-tool` package for the `openssl` command. Stop and report the output before any production-pool test.
 
 ## Gate 5 — live pool test (only when requested after Gates 1–4)
 
@@ -116,3 +118,7 @@ fi
 A stale lock is not proof that mining stopped. Inspect its PID and the process list before removing anything. If a miner process remains, record its PID and do not start another instance. Record the stop time, observed exit status, remaining process check, memory readings, temperature sensor/source or `unavailable`, and any errors.
 
 The Termux test does not implement Android foreground-service controls, automatic thermal cooldown, charging-only policy, or APK lifecycle handling. A passed Termux test is not proof of APK integration. The later standalone APK test must separately demonstrate native start/stop without Termux before dashboard work proceeds.
+
+## References
+
+[1]: https://raw.githubusercontent.com/termux/termux-packages/master/packages/openssl/openssl-tool.subpackage.sh "Termux OpenSSL command-line subpackage recipe"

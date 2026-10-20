@@ -1,6 +1,6 @@
 # Decision log and handoff
 
-Updated 2026-10-19.
+Updated 2026-10-20.
 
 ## Decisions
 
@@ -19,8 +19,10 @@ Updated 2026-10-19.
 - Pinned XMRig v6.26.0 at `b2ca72480c58d197e18c885d9fc1a0c8d517e60a`; bundled the exact upstream source archive with checksum verification and GPL license notice.
 - Updated the Termux build script to check the ARM64 Termux environment and dependency files, explicitly direct CMake to `$PREFIX`, enforce verified CA roots, and use one compile job by default.
 - Hardened the Termux launcher with conservative memory checks, private runtime config passed to Python through stdin, duplicate-session locking, and signal-forwarded shutdown.
-- Added `scripts/test-termux.sh` for safe Termux preflight/smoke checks and optional local TLS testing. It does not run a production pool or claim accepted shares.
+- Added `scripts/test-termux.sh` for safe Termux preflight/smoke checks and optional local TLS testing. Corrected its OpenSSL CLI check to apply only to optional `--tls-local`; ordinary smoke checks need the OpenSSL libraries, not the CLI package. It does not run a production pool or claim accepted shares.
 - Added the gated [PHONE-TESTING.md](PHONE-TESTING.md) and [docs/ANDROID-TERMUX-TOOLCHAIN.md](docs/ANDROID-TERMUX-TOOLCHAIN.md).
+- User-provided phone output confirms the package SHA-256, extraction, dependencies, and successful native build on a Google Pixel 9a (Android 17/API 37, ABI `arm64-v8a`, Termux Google Play `2026.10.09`). XMRig v6.26.0 compiled all 162 tasks with Clang 21.1.8, OpenSSL 3.6.3, and libuv 1.52.1; the script ran its `--version` check. This is user-shared phone evidence, not direct device access by this Sandbox.
+- The first phone smoke-test attempt stopped because the script required the `openssl` command unconditionally. The phone had `libssl.so` and `libcrypto.so` but not `$PREFIX/bin/openssl`; Termux packages that CLI separately as `openssl-tool`. Source and instructions now make it optional except for `--tls-local`; the user must verify/install the updated script and rerun the smoke test.
 - Host-side launcher regression tests passed for explicit-start gating, config values/permissions/cleanup, fail-closed CA checks, duplicate refusal, SIGINT/TERM forwarding, and no orphan mock miner. These tests use a mock engine.
 - Previously built the patched source on Sandbox x86_64 Linux. Synthetic TLS checks accepted a trusted matching hostname and rejected a hostname mismatch and untrusted CA. See [docs/TEST-REPORT.md](docs/TEST-REPORT.md).
 - Verified the pinned RandomX cache/dataset maxima from upstream headers and kept memory preflight thresholds explicitly heuristic. Tari Wallet's official library documents dual/single address types and Emoji/Base58/Hex encodings; the pool specifies `wallet/worker` without alternate encodings. The first live integration will use the wallet's plain-text/Base58 form and verify actual pool acceptance rather than impose a guessed regex.
@@ -28,15 +30,16 @@ Updated 2026-10-19.
 ## Current blockers and unverified criteria
 
 - The connected GitHub account is `NightFantomProjects`; repository is `NightFantomProjects/XTM-MINER`. The ARM64 Termux test milestone was pushed to `main` at `def0588497b831e99b6196f15ede212389b2380e`. The working tree was clean after that push; no GitHub Release or tag was created.
-- Device enumeration in this session shows only the Sandbox. No authorized physical Android phone, Termux runtime, Android SDK/NDK, `adb`, `sdkmanager`, or emulator is available here. No ARM64 Android cross-build, emulator test, Termux build, installation, or APK test was performed. The official NDK toolchain is documented but no NDK was downloaded and no license terms were accepted on the user's behalf.
+- This agent session has only the Sandbox; device tools cannot operate the user's phone directly. The user-provided output demonstrates a successful on-device ARM64 Termux build, but no Android SDK/NDK, `adb`, or emulator is available here. No Android cross-build, emulator test, APK build, or APK install was performed. No NDK was downloaded and no SDK license terms were accepted on the user's behalf.
+- The updated `scripts/test-termux.sh` has not yet been installed or run on the phone. Local Termux smoke tests, real miner hashing, TLS pool authentication, accepted shares, and stop/orphan-process behavior remain unverified.
 - No public test payout address has been provided and no production pool session was made. Pool authentication, Tari work hashing, accepted shares, pool-side worker evidence, payouts, and live pool TLS are unverified.
 - Physical memory use, temperature, battery, lifecycle, screen-off, stop, and orphan-process behavior remain unverified. The launcher mock is not physical mining evidence.
 - No standalone APK/JNI integration, Android foreground service/notification, dashboard, signing, or installable APK exists.
 
 ## Next steps
 
-1. User runs only Gate 1 in `PHONE-TESTING.md` and sends the Termux/device architecture output. Review it before giving the dependent install/build commands.
-2. If supported, install Termux packages, unpack the test archive in Termux's private home, build the pinned source, and run `scripts/test-termux.sh`; record package versions and exact output.
+1. Deliver the corrected smoke-test script with checksum; user verifies and installs it over the old copy without rebuilding XMRig, then runs `./scripts/test-termux.sh` and shares its output.
+2. If basic local checks pass, optionally install `openssl-tool` and run `./scripts/test-termux.sh --tls-local`; this remains a local-certificate test only.
 3. After local checks pass, request/enter only a public Tari receiving address for a live TLS pool test. Distinguish connection/authentication from actual accepted work; wait for a genuine accepted share and record relevant logs with identifying details redacted.
 4. Stop with Ctrl-C, check the miner PID/process list and lock cleanup, record observed RSS/available memory and any supported battery/CPU readings. Mark unsupported sensors unavailable.
-5. Only after native Android hashing, pool acceptance, and Stop behavior have evidence, obtain/pin the Android NDK/SDK toolchain and build a minimal standalone test APK that starts and stops the native engine without Termux. Then consider the full dashboard.
+5. Only after native Android hashing, pool acceptance, and Stop behavior have evidence, obtain/pin the Android NDK/SDK toolchain and build a minimal standalone test APK that starts and stops the native engine without Termux. Then consider the approved dashboard design.
