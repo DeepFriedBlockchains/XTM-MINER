@@ -87,17 +87,27 @@ After the local checks pass, run the native lifecycle test:
 
 This runs the **real compiled XMRig binary** through the launcher, but uses fake address text and `127.0.0.1:1`, an unreachable local loopback endpoint. It sends no traffic to a public pool, does not need a Tari wallet address, and cannot generate mining work. It verifies the required `--start` gate, starts the native child, verifies a duplicate invocation is refused by the Termux-wide lock, then sends TERM and checks that the child and lock are gone within a bounded wait. Its deliberate `--no-tls` use is restricted to this no-network loopback test; never use it for the live pool test. The next gate manually verifies foreground Ctrl-C. Send the complete output before proceeding.
 
-## Gate 6 — manual foreground Ctrl-C (no pool)
+## Gate 6 — interactive signal probe (no miner and no pool)
 
-After Gate 5 passes, run this command in Termux, wait until it prints a miner PID, then press **Ctrl-C once in that same Termux session**. It uses fake address text and only unreachable loopback `127.0.0.1:1`; it cannot contact a public pool or hash work.
+The first manual Ctrl-C attempt made the Termux session restart. Its post-restart diagnostic found no miner-like process and no XTM-Miner lock, but the log did not identify the cause. Before starting XMRig again, use `scripts/test-interactive-signal.sh`, which starts **no miner**, reads no wallet, and opens no socket. It persistently records whether the foreground script received a signal.
+
+```sh
+./scripts/test-interactive-signal.sh
+```
+
+When it displays `Probe ready`, send **Termux's CTRL key followed by C once**. Do not use Android Back. If the prompt returns normally, the probe should print `PASS`. If the session restarts, reopen Termux and read its private probe log. Send that output before proceeding.
+
+## Gate 7 — manual foreground Ctrl-C with real launcher (no pool)
+
+Only if Gate 6 shows that the simple probe received SIGINT normally, run this command in Termux. Wait until it prints a miner PID, then send **Termux CTRL followed by C once** in the same Termux session. It uses fake address text and only unreachable loopback `127.0.0.1:1`; it cannot contact a public pool or hash work.
 
 ```sh
 XTM_WALLET=TARI_TEST_ADDRESS ./scripts/xtm-miner.sh --start --pool 127.0.0.1:1 --worker manualstop --threads 1 --no-tls
 ```
 
-After Ctrl-C returns you to the prompt, run the existing process-and-lock check under Gate 8 below. Send both the launcher output and that check's output before proceeding.
+After Ctrl-C returns you to the prompt, run the process-and-lock check under Gate 9 below. Send both the launcher output and that check's output before proceeding.
 
-## Gate 7 — live pool test (only when requested after Gates 1–6)
+## Gate 8 — live pool test (only when requested after Gates 1–7)
 
 Do not run this until the ARM64 build and local checks have been reviewed. At that point, enter a **public Tari mainnet receiving address only** on the phone. Tari Wallet documents multiple address encodings; use the plain-text/Base58 receive-address form and do not transform it. The pool's instructions document `WALLET_ADDRESS/WORKER_NAME` but do not specify alternate encodings; exact address-format acceptance remains to be verified in the live test. The address is read without echo and is not included in the command history:
 
@@ -116,7 +126,7 @@ TLS is on by default, and the launcher requires the Termux CA bundle. Do not use
 
 The launcher prints the miner PID. While hashing, record the exact PID, `MemAvailable` from `/proc/meminfo`, and that PID's `VmRSS`/`VmHWM` from `/proc/PID/status` if readable. These are observations for that moment, not a guarantee about Android's per-app memory limit. Record battery temperature only if an installed, supported Android/Termux API returns it, and name it as a battery measurement. Record CPU temperature only if the device exposes a readable CPU sensor; otherwise write **unavailable**. Do not guess or substitute battery temperature for CPU temperature.
 
-## Gate 8 — stop and verify no orphan
+## Gate 9 — stop and verify no orphan
 
 Press **Ctrl-C in the same Termux session** running the miner. Wait for the launcher to return. Then check:
 
