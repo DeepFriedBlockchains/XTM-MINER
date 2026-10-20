@@ -30,9 +30,12 @@ No production-pool connection was made. No public receiving address or pool cred
 
 No physical readings were reported for process RSS, Android memory limits, CPU or battery temperature, battery drain, screen-off behavior, lifecycle, cooldown, or interactive Ctrl-C reliability. The real launcher did pass one bounded TERM stop and child/lock cleanup test on the phone. Manual foreground Ctrl-C remains the next no-pool gate. No Android cross-build, emulator test, standalone APK/JNI build or install, dashboard, signing, or APK lifecycle test has run. Do not claim device safety, background continuity, or universal compatibility.
 
+The first manual foreground Ctrl-C attempt reached the expected loopback `connection refused` message, then the user reported that Termux exited and restarted instead of returning to the shell. The result is **not passed**. The pasted filtered log did not include the requested process/lock summary. It showed old `cpuminer` linker errors from a different `termux-miner_v2.7` directory dated 2026-10-19, but no current XTM-Miner fatal signal, Android low-memory event, or Termux crash record. It also showed Termux binder warnings, which are insufficient to attribute the restart to the launcher. The installed Google Play Termux build is an experimental, separately maintained distribution with known missing functionality and bugs relative to stable sources [5]; this is an environment consideration, not a diagnosed cause. Do not rerun the interactive test until post-restart miner-process and lock state are captured.
+
 ## Diagnosed command/test issues
 
 - The first Termux smoke test required the `openssl` CLI even when only the ordinary smoke suite was requested. Termux separates that CLI into the `openssl-tool` subpackage [4]. The script now gates that prerequisite on `--tls-local`; the user verified the correction by passing both ordinary and optional local TLS suites on the phone.
+- The manual foreground Ctrl-C test caused the Termux session to restart. The expected loopback refusal appeared first. Available logs were inconclusive and included unrelated older `cpuminer` linker errors. A compact post-restart process/lock diagnostic is required before any retry or live pool test.
 - A clean-source patch-check command initially checked the TLS marker after a dry-run only, so it exited before applying the patch. The corrected check applied the patch, then verified the marker; it passed.
 - Earlier host configuration lacked libuv development headers; installing the host `libuv1-dev` package resolved that build prerequisite.
 - The first compile found the TLS patch needed `<openssl/err.h>`; adding the include fixed the build.
@@ -45,3 +48,4 @@ No physical readings were reported for process RSS, Android memory limits, CPU o
 [2]: https://developer.android.com/ndk/downloads "Android NDK official downloads"
 [3]: https://github.com/termux/termux-packages/blob/master/packages/ca-certificates/build.sh "Termux ca-certificates package recipe"
 [4]: https://raw.githubusercontent.com/termux/termux-packages/master/packages/openssl/openssl-tool.subpackage.sh "Termux OpenSSL command-line subpackage recipe"
+[5]: https://github.com/termux/termux-app "Termux installation and Google Play experimental-branch guidance"
