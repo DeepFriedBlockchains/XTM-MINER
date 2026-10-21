@@ -61,10 +61,49 @@ except OSError as exc:
     raise SystemExit(f"Error: cannot open pidfd for lock PID {pid}: {exc}; refusing to signal it")
 try:
     try:
-        if not os.path.samefile(f"/proc/{pid}/exe", binary):
-            raise SystemExit(f"Error: lock PID {pid} is not this project's XTM-Miner binary; refusing to signal it")
+        direct_match = os.path.samefile(f"/proc/{pid}/exe", binary)
     except FileNotFoundError:
         raise SystemExit(f"Error: lock PID {pid} exited before identity validation; refusing to signal it")
+
+    if not direct_match:
+        # Google Play Termux uses system_linker_exec, so /proc/PID/exe can be
+        # Android's linker even when this binary is the loaded executable. In
+        # that specific case require an exact executable mapping: same absolute
+        # path, same device/inode, and execute permission. A pidfd is already
+        # open, so a numeric PID reuse cannot redirect the subsequent signal.
+        linker = os.path.realpath(f"/proc/{pid}/exe")
+        binary_real = os.path.realpath(binary)
+        binary_stat = os.stat(binary_real)
+        wanted_device = (os.major(binary_stat.st_dev), os.minor(binary_stat.st_dev))
+        mapped_binary = False
+        try:
+            with open(f"/proc/{pid}/maps", encoding="utf-8") as maps:
+                for raw in maps:
+                    fields = raw.rstrip("\n").split(None, 5)
+                    if len(fields) != 6:
+                        continue
+                    _address, permissions, _offset, device, inode, pathname = fields
+                    try:
+                        map_major, map_minor = (int(part, 16) for part in device.split(":", 1))
+                        map_inode = int(inode)
+                    except (ValueError, TypeError):
+                        continue
+                    if (
+                        "x" in permissions
+                        and (map_major, map_minor) == wanted_device
+                        and map_inode == binary_stat.st_ino
+                        and pathname == binary_real
+                    ):
+                        mapped_binary = True
+                        break
+        except FileNotFoundError:
+            raise SystemExit(f"Error: lock PID {pid} exited before mapping validation; refusing to signal it")
+
+        if not (linker.endswith("/linker64") and mapped_binary):
+            raise SystemExit(
+                f"Error: lock PID {pid} is not this project's XTM-Miner binary "
+                f"(proc exe={linker}); refusing to signal it"
+            )
 
     print(f"Requesting TERM stop for XTM-Miner PID {pid} through pidfd.")
     try:

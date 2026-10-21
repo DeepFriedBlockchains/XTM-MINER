@@ -57,6 +57,43 @@ CLEANER_PID=""
 grep -q 'PASS: native child stopped and launcher released the lock.' "$TMP/stop.log"
 [[ ! -d "$LOCK_DIR" ]] || { echo 'FAIL: lock remains after stop helper test' >&2; exit 1; }
 
+# Simulate Google Play Termux system_linker_exec: /proc/PID/exe is a binary
+# named linker64 while the exact project binary is an executable file mapping.
+# The helper must accept this only after its pidfd-bound mapping validation.
+LINKER_BIN="$TMP/linker64"
+ACTOR="$TMP/linker-actor.py"
+cp "$(readlink -f "$(command -v python3)")" "$LINKER_BIN"
+chmod 700 "$LINKER_BIN"
+cat > "$ACTOR" <<'PY'
+import mmap
+import os
+import signal
+import sys
+
+fd = os.open(sys.argv[1], os.O_RDONLY)
+mapped = mmap.mmap(fd, 0, flags=mmap.MAP_PRIVATE, prot=mmap.PROT_READ | mmap.PROT_EXEC)
+os.close(fd)
+signal.pause()
+mapped.close()
+PY
+"$LINKER_BIN" "$ACTOR" "$TEST_ROOT/bin/xtm-miner" &
+CHILD_PID=$!
+mkdir "$LOCK_DIR"
+printf '%s\n' "$CHILD_PID" > "$LOCK_DIR/pid"
+(
+  while child_running; do sleep 0.1; done
+  rm -f "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR"
+) &
+CLEANER_PID=$!
+PREFIX="$TEST_PREFIX" bash "$STOPPER" > "$TMP/linker-stop.log" 2>&1
+wait "$CHILD_PID" 2>/dev/null || true
+CHILD_PID=""
+wait "$CLEANER_PID"
+CLEANER_PID=""
+grep -q 'PASS: native child stopped and launcher released the lock.' "$TMP/linker-stop.log"
+[[ ! -d "$LOCK_DIR" ]] || { echo 'FAIL: lock remains after system-linker mapping test' >&2; exit 1; }
+
 # A lock naming an unrelated executable must not be allowed to signal it.
 "$(command -v tail)" -f /dev/null &
 OTHER_PID=$!
