@@ -15,5 +15,6 @@ All notable changes to XTM-Miner will be recorded here. This project is not yet 
 - Made the external Stop helper use Linux pidfd syscalls through Python `ctypes` when Termux Python omits high-level pidfd APIs; it remains fail-closed if unsupported.
 - Added a fail-closed Google Play Termux `linker64` identity fallback that requires an exact executable mapping of the current project binary before pidfd-bound TERM.
 - Added a pidfd signal-0 liveness recheck after procfs identity inspection so an exited target fails closed before TERM.
+- Physically validated the external pidfd Stop helper on the Pixel 9a against a real loopback-only XMRig process: native exit, lock release, and first-session shell recovery were observed.
 - Hardened launcher thread and port numeric parsing against impractically long values and Bash octal interpretation of leading-zero ports.
 - Patched engine and TLS/launcher checks passed on x86_64 Linux. User-provided logs show successful ARM64 Termux build, ordinary smoke tests, local TLS certificate checks, and real native launcher TERM lifecycle testing on a Pixel 9a. No manual foreground Ctrl-C result, live pool accepted share, or standalone APK is verified.
