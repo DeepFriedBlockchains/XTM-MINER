@@ -44,10 +44,11 @@ CA_FILE="${SSL_CERT_FILE:-$PREFIX/etc/tls/cert.pem}"
   cd "$ROOT/vendor"
   sha256sum -c xmrig-v6.26.0.tar.gz.sha256
 )
-for script in "$ROOT/scripts/build-termux.sh" "$ROOT/scripts/xtm-miner.sh" "$ROOT/scripts/test-termux.sh" "$ROOT/tests/test_launcher.sh"; do
+for script in "$ROOT/scripts/build-termux.sh" "$ROOT/scripts/xtm-miner.sh" "$ROOT/scripts/test-termux.sh" "$ROOT/scripts/test-native-launcher.sh" "$ROOT/scripts/test-interactive-signal.sh" "$ROOT/scripts/stop-termux.sh" "$ROOT/tests/test_launcher.sh" "$ROOT/tests/test_stop_helper.sh"; do
   bash -n "$script"
 done
 bash "$ROOT/tests/test_launcher.sh"
+bash "$ROOT/tests/test_stop_helper.sh"
 [[ -x "$BIN" ]] || { echo "Built binary missing: $BIN; run scripts/build-termux.sh first." >&2; exit 4; }
 VERSION="$("$BIN" --version 2>&1)"
 printf '%s\n' "$VERSION"
@@ -59,5 +60,5 @@ if [[ "$TLS_LOCAL" == 1 ]]; then
 else
   echo "SKIP: local TLS certificate regression test (optional; rerun with --tls-local)."
 fi
-printf 'PASS: Termux ARM64 preflight, pinned source checksum, binary version/help, and launcher mock tests.\n'
+printf 'PASS: Termux ARM64 preflight, pinned source checksum, binary version/help, launcher mock tests, and stop-helper regression.\n'
 echo 'NOTE: No production pool connection, RandomX job hashing, accepted share, or earnings were tested.'
