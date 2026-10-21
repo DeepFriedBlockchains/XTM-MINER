@@ -99,7 +99,7 @@ On the Pixel 9a Google Play Termux build used for this milestone, the probe pers
 
 ## Gate 7 — external TERM Stop helper with real launcher (no pool)
 
-Use two Termux sessions. In the first session, start the real launcher with the fake address and unreachable loopback-only endpoint below; do **not** press Ctrl-C. In a second Termux session, run `scripts/stop-termux.sh`. It reads the private lock, opens a Linux pidfd for the current recorded PID, verifies that process is exactly this project's `bin/xtm-miner` executable, then sends TERM and waits through that same process handle for the native child and launcher lock to disappear. It fails closed for an absent or unexpected process; after opening the pidfd, the signal cannot be redirected by numeric PID reuse. No wallet is read and no public pool is contacted.
+Use two Termux sessions. In the first session, start the real launcher with the fake address and unreachable loopback-only endpoint below; do **not** press Ctrl-C. In a second Termux session, run `scripts/stop-termux.sh`. It reads the private lock, opens a Linux pidfd for the current recorded PID, verifies that process is exactly this project's `bin/xtm-miner` executable, then sends TERM and waits through that same process handle for the native child and launcher lock to disappear. When Termux Python lacks high-level pidfd functions, the helper calls the same Linux syscalls through standard `ctypes`; it fails closed if the kernel or app sandbox rejects them. It fails closed for an absent or unexpected process; after opening the pidfd, the signal cannot be redirected by numeric PID reuse. No wallet is read and no public pool is contacted.
 
 First session:
 ```sh

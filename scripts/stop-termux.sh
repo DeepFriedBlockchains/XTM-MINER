@@ -26,24 +26,37 @@ command -v python3 >/dev/null 2>&1 || fail "Python 3 is required for safe pidfd-
 PID="$(cat "$PID_FILE")"
 [[ "$PID" =~ ^[1-9][0-9]*$ ]] || fail "invalid PID in lock; inspect $LOCK_DIR manually"
 
-# pidfd_open creates a process handle. The Python code validates executable
-# identity through that handle's still-live numeric PID, sends TERM via pidfd,
-# and polls that same handle until the exact target exits. There is no numeric
-# PID check-to-kill race. Fail closed if the Android kernel/Python lacks pidfd.
+# The pinned ARM64 target uses Linux's asm-generic syscall numbers: pidfd_send_signal
+# is 424 and pidfd_open is 434. Some Termux Python builds omit high-level pidfd APIs,
+# so call libc's syscall entry through standard ctypes. Fail closed if the kernel or
+# app sandbox rejects pidfds; never substitute an unsafe numeric-PID kill.
 python3 - "$PID" "$BIN" <<'PY'
-import errno
+import ctypes
 import os
+import platform
 import select
 import signal
 import sys
 
 pid = int(sys.argv[1])
 binary = sys.argv[2]
+machine = platform.machine()
+if machine not in {"aarch64", "x86_64"}:
+    raise SystemExit(f"Error: pidfd syscall numbers are not declared for architecture {machine}; refusing unsafe numeric-PID stop")
 
-if not hasattr(os, "pidfd_open") or not hasattr(signal, "pidfd_send_signal"):
-    raise SystemExit("Error: this Python build lacks pidfd support; refusing an unsafe numeric-PID stop")
+SYS_PIDFD_SEND_SIGNAL = 424
+SYS_PIDFD_OPEN = 434
+libc = ctypes.CDLL(None, use_errno=True)
+
+def syscall_or_error(number, *args):
+    result = libc.syscall(ctypes.c_long(number), *args)
+    if result == -1:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error))
+    return result
+
 try:
-    pidfd = os.pidfd_open(pid, 0)
+    pidfd = syscall_or_error(SYS_PIDFD_OPEN, ctypes.c_int(pid), ctypes.c_uint(0))
 except OSError as exc:
     raise SystemExit(f"Error: cannot open pidfd for lock PID {pid}: {exc}; refusing to signal it")
 try:
@@ -55,7 +68,13 @@ try:
 
     print(f"Requesting TERM stop for XTM-Miner PID {pid} through pidfd.")
     try:
-        signal.pidfd_send_signal(pidfd, signal.SIGTERM)
+        syscall_or_error(
+            SYS_PIDFD_SEND_SIGNAL,
+            ctypes.c_int(pidfd),
+            ctypes.c_int(signal.SIGTERM),
+            ctypes.c_void_p(),
+            ctypes.c_uint(0),
+        )
     except OSError as exc:
         raise SystemExit(f"Error: pidfd TERM request failed for PID {pid}: {exc}")
 

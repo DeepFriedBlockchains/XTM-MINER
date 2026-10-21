@@ -57,7 +57,7 @@ CLEANER_PID=""
 grep -q 'PASS: native child stopped and launcher released the lock.' "$TMP/stop.log"
 [[ ! -d "$LOCK_DIR" ]] || { echo 'FAIL: lock remains after stop helper test' >&2; exit 1; }
 
-# A stale/reused lock must not be allowed to signal an unrelated executable.
+# A lock naming an unrelated executable must not be allowed to signal it.
 "$(command -v tail)" -f /dev/null &
 OTHER_PID=$!
 mkdir "$LOCK_DIR"
