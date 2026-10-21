@@ -99,11 +99,30 @@ try:
         except FileNotFoundError:
             raise SystemExit(f"Error: lock PID {pid} exited before mapping validation; refusing to signal it")
 
-        if not (linker.endswith("/linker64") and mapped_binary):
+        # Android/Google Play Termux may present either linker64 or the binary
+        # pathname through /proc/PID/exe while samefile() still cannot compare
+        # it to the app-data executable. Accept either known representation only
+        # with the exact executable-map validation above.
+        known_representation = linker.endswith("/linker64") or linker == binary_real
+        if not (known_representation and mapped_binary):
             raise SystemExit(
                 f"Error: lock PID {pid} is not this project's XTM-Miner binary "
                 f"(proc exe={linker}); refusing to signal it"
             )
+
+    # Recheck the pidfd target after all procfs reads. If the original process
+    # exited and its numeric PID was reused during identity inspection, signal
+    # 0 on this pidfd fails rather than accepting the replacement's procfs data.
+    try:
+        syscall_or_error(
+            SYS_PIDFD_SEND_SIGNAL,
+            ctypes.c_int(pidfd),
+            ctypes.c_int(0),
+            ctypes.c_void_p(),
+            ctypes.c_uint(0),
+        )
+    except OSError as exc:
+        raise SystemExit(f"Error: validated pidfd target exited before TERM: {exc}; refusing to signal it")
 
     print(f"Requesting TERM stop for XTM-Miner PID {pid} through pidfd.")
     try:

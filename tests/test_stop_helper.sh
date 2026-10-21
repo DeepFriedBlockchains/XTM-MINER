@@ -57,6 +57,38 @@ CLEANER_PID=""
 grep -q 'PASS: native child stopped and launcher released the lock.' "$TMP/stop.log"
 [[ ! -d "$LOCK_DIR" ]] || { echo 'FAIL: lock remains after stop helper test' >&2; exit 1; }
 
+# Simulate Android's exact /proc/PID/exe path representation when samefile()
+# cannot compare it to app-data storage, while the project binary map is exact.
+PATH_FALLBACK_STOPPER="$TEST_ROOT/scripts/stop-termux-force-path-map.sh"
+python3 - "$STOPPER" "$PATH_FALLBACK_STOPPER" <<'PY'
+from pathlib import Path
+import sys
+
+source, output = map(Path, sys.argv[1:])
+text = source.read_text()
+needle = 'direct_match = os.path.samefile(f"/proc/{pid}/exe", binary)'
+assert needle in text
+output.write_text(text.replace(needle, 'direct_match = False  # force exact-path map fallback for this regression', 1))
+PY
+chmod 700 "$PATH_FALLBACK_STOPPER"
+"$TEST_ROOT/bin/xtm-miner" 30 &
+CHILD_PID=$!
+mkdir "$LOCK_DIR"
+printf '%s\n' "$CHILD_PID" > "$LOCK_DIR/pid"
+(
+  while child_running; do sleep 0.1; done
+  rm -f "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR"
+) &
+CLEANER_PID=$!
+PREFIX="$TEST_PREFIX" bash "$PATH_FALLBACK_STOPPER" > "$TMP/path-map-stop.log" 2>&1
+wait "$CHILD_PID" 2>/dev/null || true
+CHILD_PID=""
+wait "$CLEANER_PID"
+CLEANER_PID=""
+grep -q 'PASS: native child stopped and launcher released the lock.' "$TMP/path-map-stop.log"
+[[ ! -d "$LOCK_DIR" ]] || { echo 'FAIL: lock remains after exact-path map fallback test' >&2; exit 1; }
+
 # Simulate Google Play Termux system_linker_exec: /proc/PID/exe is a binary
 # named linker64 while the exact project binary is an executable file mapping.
 # The helper must accept this only after its pidfd-bound mapping validation.
